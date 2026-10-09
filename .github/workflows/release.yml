@@ -1,0 +1,130 @@
+# Releases the plugin when run by hand on main (Actions > Release > Run workflow), with the version to release and an optional changelog.
+# The release job sets the version, tests, builds and packages the plugin, publishes the GitHub release with the zip, and then commits the version and manifest.json to main.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, four parts without a leading v, such as 1.1.0.0
+        required: true
+        type: string
+      changelog:
+        description: One-line changelog, Release <version> when left empty
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# One release at a time
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PLUGIN_NAME: Detect Aspect Ratio
+  PLUGIN_PROJECT: Jellyfin.Plugin.DetectAspectRatio/Jellyfin.Plugin.DetectAspectRatio.csproj
+  SOLUTION: Jellyfin.Plugin.DetectAspectRatio.slnx
+  CLIENT_TESTS: Jellyfin.Plugin.DetectAspectRatio.Tests/Client/*.test.mjs
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Pushes the release commit and tag, and creates the release
+    permissions:
+      contents: write
+    # NOTE: Scripts read the inputs from the environment only, because ${{ }} inside a script would splice the changelog into shell code
+    env:
+      VERSION: ${{ inputs.version }}
+      CHANGELOG: ${{ inputs.changelog || format('Release {0}', inputs.version) }}
+      TAG: v${{ inputs.version }}
+    steps:
+      # The last step rebases the release commit onto main and pushes it, which would carry another branch's commits into main
+      - name: Stop unless run on main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Run the release on main, not $GITHUB_REF_NAME"
+          exit 1
+
+      - name: Check out the plugin
+        uses: actions/checkout@v7
+
+      - name: Stop if the release tag exists
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "::error::$TAG already exists"
+            exit 1
+          fi
+
+      # setup-uv publishes exact version tags only
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: false
+
+      # The client add-on's tests run on Node's built-in test runner, which takes glob patterns since Node 21
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Set the version and changelog
+        run: uv run release.py set-version "$VERSION" --changelog "$CHANGELOG"
+
+      - name: Test the plugin and the client add-on
+        run: |
+          dotnet test "$SOLUTION" --configuration Release
+          node --test "$CLIENT_TESTS"
+
+      - name: Build the plugin
+        run: dotnet publish "$PLUGIN_PROJECT" --configuration Release
+
+      - name: Package the plugin and record it in manifest.json
+        run: |
+          uv run release.py package \
+            --source-url-base "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$TAG" \
+            --output-directory "$RUNNER_TEMP/package" \
+            --manifest manifest.json
+
+      - name: Commit the version and manifest.json, and tag the release
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add build.yaml Directory.Build.props manifest.json
+          git commit --message "Release $VERSION"
+          git tag --annotate "$TAG" --message "$PLUGIN_NAME $VERSION"
+
+      # The release goes up before manifest.json reaches main, so the manifest never names a missing zip
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git push origin "refs/tags/$TAG"
+          manifest_url="https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/manifest.json"
+          notes_file="$RUNNER_TEMP/release-notes.md"
+          {
+            printf '%s\n\n' "$CHANGELOG"
+            printf 'To install, add %s as a plugin repository (Dashboard > Plugins), then install %s from the catalog.\n' \
+              "$manifest_url" "$PLUGIN_NAME"
+          } > "$notes_file"
+          gh release create "$TAG" "$RUNNER_TEMP"/package/*.zip \
+            --verify-tag --title "$PLUGIN_NAME $VERSION" --notes-file "$notes_file"
+
+      # Commits pushed to main during the build go under the release commit; the tag keeps the commit that was built
+      - name: Publish manifest.json on main
+        run: |
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
