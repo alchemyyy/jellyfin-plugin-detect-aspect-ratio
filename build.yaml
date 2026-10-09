@@ -1,7 +1,7 @@
 ---
 name: "Detect Aspect Ratio"
 guid: "d690f47c-0540-4d33-b141-26948ccf1f35"
-version: "1.0.0.0"
+version: "1.0.0.1"
 targetAbi: "12.1.0.0"
 framework: "net10.0"
 overview: "Crops black bars encoded into videos when Jellyfin Web plays them"
@@ -14,4 +14,4 @@ owner: "alchemyyy"
 artifacts:
 - "Jellyfin.Plugin.DetectAspectRatio.dll"
 changelog: >
-  Release 1.0.0.0
+  Compute aspect ratios from trickplay data daily, and once after the first install
