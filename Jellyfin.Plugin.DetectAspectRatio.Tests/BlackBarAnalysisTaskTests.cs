@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Jellyfin.Plugin.DetectAspectRatio.Analysis;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Model.Globalization;
+using MediaBrowser.Model.Tasks;
 using Xunit;
 
 namespace Jellyfin.Plugin.DetectAspectRatio.Tests;
@@ -59,12 +60,22 @@ public sealed class BlackBarAnalysisTaskTests : IDisposable
     }
 
     [Fact]
-    public void GetDefaultTriggers_IsEmpty()
+    public void GetDefaultTriggers_RunsDailyAfterGenerateTrickplayImages()
     {
-        // The task runs after Generate Trickplay Images, queued by TrickplayTaskListener
-        Assert.Empty(CreateTask().GetDefaultTriggers());
-        Assert.Equal("DetectAspectRatioMeasureBlackBars", CreateTask().Key);
-        Assert.Equal("Library", CreateTask().Category);
+        TaskTriggerInfo trigger = Assert.Single(CreateTask().GetDefaultTriggers());
+
+        Assert.Equal(TaskTriggerInfoType.DailyTrigger, trigger.Type);
+        Assert.Equal(TimeSpan.FromHours(4).Ticks, trigger.TimeOfDayTicks);
+    }
+
+    [Fact]
+    public void Task_IsNamedInTheLibraryCategory()
+    {
+        BlackBarAnalysisTask task = CreateTask();
+
+        Assert.Equal("Compute Aspect Ratios from Trickplay Data", task.Name);
+        Assert.Equal("DetectAspectRatioComputeAspectRatios", task.Key);
+        Assert.Equal("Library", task.Category);
     }
 
     private BlackBarAnalysisTask CreateTask()

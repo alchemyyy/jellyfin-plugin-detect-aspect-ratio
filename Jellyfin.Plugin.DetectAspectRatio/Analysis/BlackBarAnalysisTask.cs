@@ -12,8 +12,8 @@ using MediaBrowser.Model.Tasks;
 namespace Jellyfin.Plugin.DetectAspectRatio.Analysis;
 
 /// <summary>
-/// Measures every video that has trickplay images, so playback never waits for a measurement, and deletes the measurements of
-/// videos that no longer have them. <see cref="TrickplayTaskListener"/> queues it after each Generate Trickplay Images run.
+/// Measures every video that has trickplay images, so playback never waits for a measurement, and deletes the measurements of videos that no longer have them.
+/// It runs daily, once on a server where it never ran (<see cref="FirstRunQueuer"/>), and after each Generate Trickplay Images run (<see cref="TrickplayTaskListener"/>).
 /// </summary>
 /// <param name="libraryManager">The library manager.</param>
 /// <param name="trickplayManager">The trickplay manager.</param>
@@ -30,19 +30,22 @@ public sealed class BlackBarAnalysisTask(
     /// <summary>
     /// The task key.
     /// </summary>
-    public const string TaskKey = "DetectAspectRatioMeasureBlackBars";
+    public const string TaskKey = "DetectAspectRatioComputeAspectRatios";
 
     private const int PageSize = 100;
     private const string LibraryCategoryKey = "TasksLibraryCategory";
 
+    // An hour after Generate Trickplay Images, which Jellyfin runs daily at 3 AM by default
+    private static readonly TimeSpan DailyRunTime = TimeSpan.FromHours(4);
+
     /// <inheritdoc />
-    public string Name => "Measure Black Bars";
+    public string Name => "Compute Aspect Ratios from Trickplay Data";
 
     /// <inheritdoc />
     public string Key => TaskKey;
 
     /// <inheritdoc />
-    public string Description => "Measures the black bars of videos from their trickplay images, so playback can crop them at once.";
+    public string Description => "Computes the aspect ratio inside the black bars of each video from its trickplay images, so playback can crop them at once.";
 
     /// <inheritdoc />
     public string Category => localizationManager.GetLocalizedString(LibraryCategoryKey);
@@ -98,7 +101,14 @@ public sealed class BlackBarAnalysisTask(
     /// <inheritdoc />
     public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
     {
-        // Runs after Generate Trickplay Images instead; playback measures a video it finds unmeasured
-        return [];
+        // Library scans can extract trickplay images too, and TrickplayTaskListener never hears of those
+        return
+        [
+            new TaskTriggerInfo
+            {
+                Type = TaskTriggerInfoType.DailyTrigger,
+                TimeOfDayTicks = DailyRunTime.Ticks,
+            },
+        ];
     }
 }

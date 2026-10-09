@@ -23,6 +23,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
             serviceProvider.GetRequiredService<ILogger<BlackBarStore>>()));
         serviceCollection.AddSingleton<BlackBarAnalyzer>();
         serviceCollection.AddHostedService<TrickplayTaskListener>();
+        serviceCollection.AddHostedService<FirstRunQueuer>();
 
         // The registrar picks File Transformation or the fallback middleware; the middleware is always installed and stays inert unless picked
         serviceCollection.AddHostedService<FileTransformationRegistrar>();
