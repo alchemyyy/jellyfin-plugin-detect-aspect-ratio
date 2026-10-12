@@ -7,6 +7,8 @@ A plugin form of my PR here: [jellyfin/jellyfin#16399](https://github.com/jellyf
 
 https://github.com/user-attachments/assets/dcab3e41-35b4-4e13-aa41-e321aaf14631
 
+If you think this plugin is useful please comment on the PR! This feature cannot be utilized in clients that aren't aware of it, so it won't work in anything besides the web client until it gets merged.
+
 ## How
 
 Many video files carry black bars inside the frame: a 2.39:1 film in a 16:9 frame is letterboxed, 4:3 content in a 16:9 frame is pillarboxed, and some files are both.
